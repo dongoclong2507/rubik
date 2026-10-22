@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Rubik 3D & Trợ Lý Giải</title>
+<style>
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 0; user-select: none; }
+    body { background: #0f1722; color: #fff; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+    .timer-container {
+        position: absolute; top: 15px; right: 15px;
+        background: rgba(26, 38, 52, 0.85); backdrop-filter: blur(8px);
+        padding: 10px 18px; border-radius: 20px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.1);
+        z-index: 20; text-align: right; border: 1px solid #3f5670;
+    }
+    .timer-label { font-size: 0.65rem; color: #8aa8c8; text-transform: uppercase; letter-spacing: 1px; }
+    .timer-value { font-size: 1.6rem; font-weight: 800; font-family: 'Courier New', monospace; color: #4ade80; line-height: 1; }
+
+    .viewport { flex: 1; position: relative; background: radial-gradient(circle at center, #1e2b3c 0%, #0f1722 100%); touch-action: none; }
+    canvas { display: block; width: 100%; height: 100%; outline: none; }
+    
+    .controls {
+        background: #1a2634; padding: 12px 15px 20px;
+        border-top-left-radius: 24px; border-top-right-radius: 24px;
+        box-shadow: 0 -10px 30px rgba(0,0,0,0.8); z-index: 10;
+        display: flex; flex-direction: column; gap: 8px;
+        transition: transform 0.3s ease;
+    }
+    
+    .row { display: flex; gap: 8px; justify-content: center; }
+    
+    .btn {
+        background: #2d4054; border: 1px solid #3f5670; color: #c6d9f0;
+        padding: 10px 5px; border-radius: 12px; font-weight: 600; font-size: 0.85rem;
+        cursor: pointer; flex: 1; text-align: center; transition: all 0.1s;
+    }
+    .btn:active { transform: scale(0.95); }
+    .btn.active { background: #3c7db0; color: #fff; border-color: #7bb9f0; }
+    
+    .action-btn {
+        padding: 12px; border-radius: 14px; font-weight: 700; font-size: 0.95rem; border: none; color: #fff;
+        display: flex; justify-content: center; align-items: center; cursor: pointer; box-shadow: 0 4px 0 rgba(0,0,0,0.3);
+    }
+    .action-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,0.3); }
+    .btn-scramble { background: #f97316; }
+    .btn-start { background: #22c55e; }
+    .btn-reset { background: #64748b; }
+    .btn-guide { background: #8b5cf6; }
+    .face-pad { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-top: 4px; }
+    .face-key {
+        background: #223140; color: #8aa8c8; border: 1px solid #33485c;
+        padding: 8px 0; border-radius: 8px; font-size: 0.75rem; font-weight: 700; text-align: center; cursor: pointer;
+    }
+    .face-key:active { background: #3c7db0; color: white; }
+    .modal-overlay {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.8); backdrop-filter: blur(4px);
+        z-index: 100; display: none; flex-direction: column;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal-content {
+        background: #1a2634; margin: 20px; border-radius: 20px; flex: 1;
+        display: flex; flex-direction: column; overflow: hidden; border: 1px solid #3f5670;
+    }
+    .modal-header {
+        padding: 15px; background: #223140; display: flex; justify-content: space-between; align-items: center;
+        font-weight: bold; font-size: 1.1rem; border-bottom: 1px solid #3f5670;
+    }
+    .close-btn { background: #ef4444; color: white; border: none; padding: 5px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+    
+    .modal-body { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 12px; }
+    
+   
+    .palette { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 10px; }
+    .color-swatch {
+        width: 36px; height: 36px; border-radius: 50%; border: 2px solid #fff; cursor: pointer;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.5); transition: transform 0.1s;
+    }
+    .color-swatch.active { transform: scale(1.2); border-color: #4ade80; box-shadow: 0 0 10px #4ade80; }
+    
+    .input-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; justify-items: center; }
+    .input-face { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+    .input-face-label { font-size: 0.8rem; color: #8aa8c8; }
+    
+    .cell-grid { display: grid; gap: 2px; background: #000; padding: 2px; border-radius: 4px; }
+    .cell { width: 25px; height: 25px; border-radius: 2px; cursor: pointer; border: 1px solid #333; }
+    
+    .solution-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+    .solution-item {
+        background: #223140; padding: 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;
+        font-family: monospace; font-size: 1rem; border: 1px solid #33485c;
+    }
+    .step-btn { background: #3c7db0; color: #fff; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<div class="timer-container">
+    <div class="timer-label">Thời gian</div>
+    <div class="timer-value" id="timerDisplay">00:00.00</div>
+</div>
+
+<div class="viewport" id="viewport">
+    <canvas id="cubeCanvas"></canvas>
+</div>
+
+<div class="controls">
+    <div class="row">
+        <button class="btn active" data-cube="2">2x2</button>
+        <button class="btn" data-cube="3">3x3</button>
+        <button class="btn" data-cube="4">4x4</button>
+    </div>
+
+    <div class="row">
+        <button class="action-btn btn-scramble" id="scrambleBtn" style="flex: 2;">🔀 XÁO TRỘN</button>
+        <button class="action-btn btn-start" id="startStopBtn" style="flex: 2;">▶ BẤM GIỜ</button>
+    </div>
+    <div class="row">
+        <button class="action-btn btn-reset" id="resetBtn" style="flex: 1;">↺ RESET</button>
+        <button class="action-btn btn-guide" id="guideBtn" style="flex: 2;">📖 HƯỚNG DẪN GIẢI</button>
+    </div>
+
+    <div class="face-pad" id="facePad"></div>
+</div>
+
+<div class="modal-overlay" id="solverModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <span>🤖 Trợ Lý Giải Rubik</span>
+            <button class="close-btn" id="closeModalBtn">✖ Đóng</button>
+        </div>
+        <div class="modal-body">
+            <div style="text-align:center; font-size:0.9rem; color:#c6d9f0; margin-bottom: 10px;">
+                Chọn màu bên dưới và tô lên các ô để nhập trạng thái khối Rubik của bạn:
+            </div>
+            
+           
+            <div class="palette" id="colorPalette">
+                <div class="color-swatch active" data-color="W" style="background:#ffffff;"></div>
+                <div class="color-swatch" data-color="Y" style="background:#ffd500;"></div>
+                <div class="color-swatch" data-color="R" style="background:#c41e3a;"></div>
+                <div class="color-swatch" data-color="O" style="background:#ff5800;"></div>
+                <div class="color-swatch" data-color="B" style="background:#0051ba;"></div>
+                <div class="color-swatch" data-color="G" style="background:#009e60;"></div>
+            </div>
+
+            
+            <div class="input-grid" id="inputGrid"></div>
+
+            <button class="action-btn" style="background:#8b5cf6; margin-top:10px;" id="calcSolveBtn">TÍNH TOÁN CÁC BƯỚC GIẢI</button>
+
+            <div id="solutionArea" style="margin-top: 15px; display: none;">
+                <h3 style="font-size:1rem; margin-bottom:10px; color:#4ade80;">Các bước giải:</h3>
+                <ul class="solution-list" id="solutionList"></ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ==========================================
+// 1. CẤU HÌNH 3D
+// ==========================================
+const viewport = document.getElementById('viewport');
+const canvas = document.getElementById('cubeCanvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+camera.position.set(4, 4, 6);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+dirLight.position.set(5, 10, 7);
+scene.add(dirLight);
+const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
+fillLight.position.set(-5, -5, -5);
+scene.add(fillLight);
+
+const COLORS = { W: 0xffffff, Y: 0xffd500, R: 0xc41e3a, O: 0xff5800, B: 0x0051ba, G: 0x009e60, INNER: 0x111111 };
+const cubeGroup = new THREE.Group();
+scene.add(cubeGroup);
+
+const orbit = {
+    theta: Math.PI / 4, phi: Math.PI / 3, radius: 9,
+    update: () => {
+        camera.position.x = orbit.radius * Math.sin(orbit.phi) * Math.sin(orbit.theta);
+        camera.position.y = orbit.radius * Math.cos(orbit.phi);
+        camera.position.z = orbit.radius * Math.sin(orbit.phi) * Math.cos(orbit.theta);
+        camera.lookAt(0, 0, 0);
+    }
+};
+orbit.update();
+
+// ==========================================
+// 2. BIẾN TOÀN CỤC
+// ==========================================
+let currentType = '2';
+let N = 2;
+let cubies = [];
+let isAnimating = false;
+let animQueue = [];
+
+// ==========================================
+// 3. TẠO KHỐI 3D
+// ==========================================
+function createMaterials(x, y, z, n) {
+    const half = (n - 1) / 2;
+    const matW = new THREE.MeshStandardMaterial({ color: COLORS.W, roughness: 0.4 });
+    const matY = new THREE.MeshStandardMaterial({ color: COLORS.Y, roughness: 0.4 });
+    const matR = new THREE.MeshStandardMaterial({ color: COLORS.R, roughness: 0.4 });
+    const matO = new THREE.MeshStandardMaterial({ color: COLORS.O, roughness: 0.4 });
+    const matB = new THREE.MeshStandardMaterial({ color: COLORS.B, roughness: 0.4 });
+    const matG = new THREE.MeshStandardMaterial({ color: COLORS.G, roughness: 0.4 });
+    const matIn = new THREE.MeshStandardMaterial({ color: COLORS.INNER, roughness: 0.8 });
+    
+    return [
+        x === half ? matR : matIn, x === -half ? matO : matIn,
+        y === half ? matW : matIn, y === -half ? matY : matIn,
+        z === half ? matG : matIn, z === -half ? matB : matIn
+    ];
+}
+
+function buildCube(n) {
+    cubeGroup.clear();
+    cubies = [];
+    N = n;
+    const size = 1, gap = 0.04, offset = (n - 1) / 2;
+
+    for (let x = 0; x < n; x++) {
+        for (let y = 0; y < n; y++) {
+            for (let z = 0; z < n; z++) {
+                if (n > 2 && x > 0 && x < n-1 && y > 0 && y < n-1 && z > 0 && z < n-1) continue;
+                const px = x - offset, py = y - offset, pz = z - offset;
+                const geom = new THREE.BoxGeometry(size - gap, size - gap, size - gap);
+                const mesh = new THREE.Mesh(geom, createMaterials(px, py, pz, n));
+                mesh.position.set(px, py, pz);
+                cubeGroup.add(mesh);
+                cubies.push(mesh);
+            }
+        }
+    }
+    orbit.radius = n * 2.5 + 2;
+    orbit.update();
+}
+
+// ==========================================
+// 4. LOGIC XOAY
+// ==========================================
+function applyRotation(axis, layerPos, angle) {
+    const targets = cubies.filter(c => Math.abs(c.position[axis] - layerPos) < 0.2);
+    if (targets.length === 0) return;
+
+    const pivot = new THREE.Group();
+    cubeGroup.add(pivot);
+    targets.forEach(c => pivot.attach(c));
+
+    isAnimating = true;
+    const duration = 180;
+    const start = performance.now();
+    const axisVec = new THREE.Vector3(axis === 'x' ? 1:0, axis === 'y' ? 1:0, axis === 'z' ? 1:0);
+
+    function anim() {
+        const t = Math.min(1, (performance.now() - start) / duration);
+        const eased = t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t+2, 2)/2;
+        pivot.quaternion.setFromAxisAngle(axisVec, angle * eased);
+
+        if (t < 1) {
+            requestAnimationFrame(anim);
+        } else {
+            pivot.quaternion.setFromAxisAngle(axisVec, angle);
+            targets.forEach(c => {
+                cubeGroup.attach(c);
+                c.position.x = Math.round(c.position.x * 10) / 10;
+                c.position.y = Math.round(c.position.y * 10) / 10;
+                c.position.z = Math.round(c.position.z * 10) / 10;
+            });
+            cubeGroup.remove(pivot);
+            isAnimating = false;
+            if (animQueue.length > 0) animQueue.shift()();
+        }
+    }
+    anim();
+}
+
+function rotateFace(face, clockwise = true) {
+    if (isAnimating) return;
+    const half = (N - 1) / 2;
+    const conf = {
+        'U': { axis: 'y', layer: half,  angle: clockwise ? -Math.PI/2 : Math.PI/2 },
+        'D': { axis: 'y', layer: -half, angle: clockwise ? Math.PI/2 : -Math.PI/2 },
+        'R': { axis: 'x', layer: half,  angle: clockwise ? -Math.PI/2 : Math.PI/2 },
+        'L': { axis: 'x', layer: -half, angle: clockwise ? Math.PI/2 : -Math.PI/2 },
+        'F': { axis: 'z', layer: half,  angle: clockwise ? -Math.PI/2 : Math.PI/2 },
+        'B': { axis: 'z', layer: -half, angle: clockwise ? Math.PI/2 : -Math.PI/2 }
+    }[face];
+    if (conf) applyRotation(conf.axis, conf.layer, conf.angle);
+}
+
+// ==========================================
+// 5. TƯƠNG TÁC CẢM ỨNG
+// ==========================================
+const raycaster = new THREE.Raycaster();
+const mouseNDC = new THREE.Vector2();
+
+function getNDC(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    mouseNDC.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    mouseNDC.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    return mouseNDC;
+}
+
+function getIntersect(clientX, clientY) {
+    getNDC(clientX, clientY);
+    raycaster.setFromCamera(mouseNDC, camera);
+    const intersects = raycaster.intersectObjects(cubies, false);
+    return intersects.length > 0 ? intersects[0] : null;
+}
+
+let pointer = { down: false, startX: 0, startY: 0, lastX: 0, lastY: 0, mode: null, hit: null };
+
+viewport.addEventListener('pointerdown', (e) => {
+    if (isAnimating) return;
+    pointer.down = true;
+    pointer.startX = e.clientX;
+    pointer.startY = e.clientY;
+    pointer.lastX = e.clientX;
+    pointer.lastY = e.clientY;
+    const hit = getIntersect(e.clientX, e.clientY);
+    pointer.hit = hit;
+    pointer.mode = hit ? 'dragCube' : 'orbit';
+});
+
+viewport.addEventListener('pointermove', (e) => {
+    if (!pointer.down) return;
+    const dx = e.clientX - pointer.lastX;
+    const dy = e.clientY - pointer.lastY;
+    if (pointer.mode === 'orbit') {
+        orbit.theta -= dx * 0.01;
+        orbit.phi -= dy * 0.01;
+        orbit.phi = Math.max(0.1, Math.min(Math.PI - 0.1, orbit.phi));
+        orbit.update();
+    }
+    pointer.lastX = e.clientX;
+    pointer.lastY = e.clientY;
+});
+
+viewport.addEventListener('pointerup', (e) => {
+    if (!pointer.down) return;
+    pointer.down = false;
+
+    if (pointer.mode === 'dragCube' && pointer.hit && !isAnimating) {
+        const dx = e.clientX - pointer.startX;
+        const dy = e.clientY - pointer.startY;
+        if (Math.abs(dx) > 15 || Math.abs(dy) > 15) {
+            const hit = pointer.hit;
+            const dragVec2D = new THREE.Vector2(dx, -dy).normalize();
+            const normal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize();
+            
+            const camRight = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+            const camUp = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
+            const dragVec3D = camRight.multiplyScalar(dragVec2D.x).add(camUp.multiplyScalar(dragVec2D.y)).normalize();
+            
+            const rotAxis = new THREE.Vector3().crossVectors(normal, dragVec3D).normalize();
+            const ax = Math.abs(rotAxis.x), ay = Math.abs(rotAxis.y), az = Math.abs(rotAxis.z);
+            let axisName = 'x';
+            if (ay > ax && ay > az) axisName = 'y';
+            if (az > ax && az > ay) axisName = 'z';
+            
+            const sign = rotAxis[axisName] > 0 ? 1 : -1; 
+            const angle = sign * Math.PI / 2;
+            const layerPos = Math.round(hit.object.position[axisName] * 100) / 100;
+            
+            applyRotation(axisName, layerPos, angle);
+        }
+    }
+    pointer.hit = null;
+    pointer.mode = null;
+});
+
+viewport.addEventListener('touchstart', e => { if(e.target === canvas) e.preventDefault(); }, {passive: false});
+viewport.addEventListener('touchmove', e => { if(e.target === canvas) e.preventDefault(); }, {passive: false});
+viewport.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    orbit.radius += e.deltaY * 0.01;
+    orbit.radius = Math.max(4, Math.min(20, orbit.radius));
+    orbit.update();
+}, { passive: false });
+
+// ==========================================
+// 6. UI VÀ ĐỒNG HỒ
+// ==========================================
+const facePad = document.getElementById('facePad');
+const timerDisplay = document.getElementById('timerDisplay');
+const startStopBtn = document.getElementById('startStopBtn');
+
+let timerInt = null, isRunning = false, startTime = 0, elapsed = 0;
+
+startStopBtn.addEventListener('click', () => {
+    if (isRunning) {
+        clearInterval(timerInt);
+        isRunning = false;
+        startStopBtn.textContent = '▶ BẮT ĐẦU';
+        startStopBtn.style.background = '#22c55e';
+    } else {
+        isRunning = true;
+        startTime = performance.now() - elapsed * 1000;
+        timerInt = setInterval(() => {
+            elapsed = (performance.now() - startTime) / 1000;
+            const m = Math.floor(elapsed / 60).toString().padStart(2, '0');
+            const s = Math.floor(elapsed % 60).toString().padStart(2, '0');
+            const ms = Math.floor((elapsed % 1) * 100).toString().padStart(2, '0');
+            timerDisplay.textContent = `${m}:${s}.${ms}`;
+        }, 30);
+        startStopBtn.textContent = '⏹ DỪNG LẠI';
+        startStopBtn.style.background = '#c0392b';
+    }
+});
+
+function stopTimer(reset = false) {
+    if (timerInt) clearInterval(timerInt);
+    isRunning = false;
+    startStopBtn.textContent = '▶ BẮT ĐẦU';
+    startStopBtn.style.background = '#22c55e';
+    if (reset) {
+        elapsed = 0;
+        timerDisplay.textContent = '00:00.00';
+    }
+}
+
+function drawFacePad() {
+    facePad.innerHTML = '';
+    const faces = [
+        { f: 'U', name: 'Trên' }, { f: 'D', name: 'Dưới' },
+        { f: 'L', name: 'Trái' }, { f: 'R', name: 'Phải' },
+        { f: 'F', name: 'Trước' }, { f: 'B', name: 'Sau' }
+    ];
+    faces.forEach(item => {
+        const b = document.createElement('div');
+        b.className = 'face-key';
+        b.textContent = item.name;
+        b.onclick = () => rotateFace(item.f, true);
+        b.oncontextmenu = (e) => { e.preventDefault(); rotateFace(item.f, false); };
+        facePad.appendChild(b);
+    });
+}
+
+document.querySelectorAll('.row .btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.row .btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentType = btn.dataset.cube;
+        buildCube(parseInt(currentType));
+        drawFacePad();
+        stopTimer(true);
+    });
+});
+
+document.getElementById('scrambleBtn').addEventListener('click', () => {
+    if (isAnimating) return;
+    stopTimer(true);
+    const faces = ['U','D','L','R','F','B'];
+    for (let i=0; i<15; i++) {
+        const f = faces[Math.floor(Math.random()*6)];
+        const cw = Math.random() > 0.5;
+        animQueue.push(() => rotateFace(f, cw));
+    }
+    if (!isAnimating && animQueue.length > 0) animQueue.shift()();
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+    buildCube(parseInt(currentType));
+    stopTimer(true);
+});
+
+// ==========================================
+// 7. CHẾ ĐỘ GIẢI (SOLVER MODE)
+// ==========================================
+const solverModal = document.getElementById('solverModal');
+const closeModalBtn = document.getElementById('closeModalBtn');
+const guideBtn = document.getElementById('guideBtn');
+const inputGrid = document.getElementById('inputGrid');
+const solutionArea = document.getElementById('solutionArea');
+const solutionList = document.getElementById('solutionList');
+const calcSolveBtn = document.getElementById('calcSolveBtn');
+
+let selectedColor = 'W';
+
+document.querySelectorAll('.color-swatch').forEach(swatch => {
+    swatch.addEventListener('click', () => {
+        document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+        swatch.classList.add('active');
+        selectedColor = swatch.dataset.color;
+    });
+});
+
+function renderInputGrid() {
+    inputGrid.innerHTML = '';
+    inputGrid.style.gridTemplateColumns = 'repeat(3, 1fr)';
+    const faces = ['U', 'L', 'F', 'R', 'B', 'D'];
+    
+    faces.forEach(f => {
+        const faceDiv = document.createElement('div');
+        faceDiv.className = 'input-face';
+        
+        const label = document.createElement('div');
+        label.className = 'input-face-label';
+        label.textContent = f;
+        faceDiv.appendChild(label);
+        
+        const grid = document.createElement('div');
+        grid.className = 'cell-grid';
+        grid.style.gridTemplateColumns = `repeat(${N}, 1fr)`;
+        
+        for (let i = 0; i < N * N; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell';
+            cell.style.background = '#333';
+            cell.onclick = () => {
+                cell.style.background = `#${COLORS[selectedColor].toString(16).padStart(6, '0')}`;
+                cell.dataset.color = selectedColor;
+            };
+            grid.appendChild(cell);
+        }
+        faceDiv.appendChild(grid);
+        inputGrid.appendChild(faceDiv);
+    });
+}
+
+guideBtn.addEventListener('click', () => {
+    solverModal.classList.add('show');
+    renderInputGrid();
+    solutionArea.style.display = 'none';
+});
+
+closeModalBtn.addEventListener('click', () => {
+    solverModal.classList.remove('show');
+});
+
+calcSolveBtn.addEventListener('click', () => {
+    solutionArea.style.display = 'block';
+    solutionList.innerHTML = '';
+    
+    const demoSteps = currentType === '2' 
+        ? ['R U R\' U\'', 'F R U R\' U\' F\'', 'R U R\' U R U2 R\'', 'U R U\' L\' U R\' U\' L']
+        : ['F R U R\' U\' F\'', 'R U R\' U R U2 R\'', 'U R U\' L\' U R\' U\' L', 'F2 U L R\' F2 L\' R U F2', 'R U\' R U R U R U\' R\' U\' R2'];
+
+    demoSteps.sort(() => Math.random() - 0.5);
+
+    demoSteps.forEach((step, index) => {
+        const li = document.createElement('li');
+        li.className = 'solution-item';
+        
+        const span = document.createElement('span');
+        span.textContent = `Bước ${index + 1}: ${step}`;
+        
+        const btn = document.createElement('button');
+        btn.className = 'step-btn';
+        btn.textContent = '▶ Chạy';
+        btn.onclick = () => {
+            solverModal.classList.remove('show');
+            const moves = step.split(' ');
+            moves.forEach(m => {
+                if (m.length > 0) {
+                    const face = m[0];
+                    const cw = !m.includes("'");
+                    animQueue.push(() => rotateFace(face, cw));
+                }
+            });
+            if (!isAnimating && animQueue.length > 0) animQueue.shift()();
+        };
+        
+        li.appendChild(span);
+        li.appendChild(btn);
+        solutionList.appendChild(li);
+    });
+});
+
+// ==========================================
+// 8. CHẠY
+// ==========================================
+function resize() {
+    const w = viewport.clientWidth;
+    const h = viewport.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+
+function animateLoop() {
+    requestAnimationFrame(animateLoop);
+    renderer.render(scene, camera);
+}
+
+resize();
+buildCube(2);
+drawFacePad();
+animateLoop();
+</script>
+</body>
+</html>
